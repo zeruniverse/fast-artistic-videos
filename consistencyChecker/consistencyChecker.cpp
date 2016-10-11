@@ -85,24 +85,6 @@ void checkConsistency(const CTensor<float>& flow1, const CTensor<float>& flow2, 
         continue;
       }
     }
-
-  //filter out the boundary
-  for (int ay = 0; ay < flow1.ySize(); ay++){
-    reliable(0,ay)=-255.0f;
-    reliable(1,ay)=-255.0f;
-    reliable(2,ay)=-255.0f;
-    reliable(flow1.xSize()-1,ay) = -255.0f;
-    reliable(flow1.xSize()-2,ay) = -255.0f;
-    reliable(flow1.xSize()-3,ay) = -255.0f;
-  }
-  for (int ax = 0; ax < flow1.xSize(); ax++){
-    reliable(ax,0)=-255.0f;
-    reliable(ax,1)=-255.0f;
-    reliable(ax,2)=-255.0f;
-    reliable(ax,flow1.ySize()-1) = -255.0f;
-    reliable(ax,flow1.ySize()-2) = -255.0f;
-    reliable(ax,flow1.ySize()-3) = -255.0f;
-  }
 }
 
 int main(int argc, char** args) {
