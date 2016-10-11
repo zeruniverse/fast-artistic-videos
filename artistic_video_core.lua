@@ -7,7 +7,7 @@ local lbfgs_mod = require 'lbfgs'
 --- MAIN FUNCTIONS
 ---
 
-function runOptimization(params, net, content_losses, style_losses, temporal_losses,
+function runOptimization(params, net, content_losses, style_losses, temporal_losses, luminance_losses,
     img, frameIdx, runIdx, max_iter)
   local isMultiPass = (runIdx ~= -1)
 
@@ -47,6 +47,9 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
       for i, loss_module in ipairs(style_losses) do
         print(string.format('  Style %d loss: %f', i, loss_module.loss))
       end
+      for i, loss_module in ipairs(luminance_losses) do
+        print(string.format('  Luminance %d loss: %f', i, loss_module.loss))
+      end
       print(string.format('  Total loss: %f', loss))
     end
   end
@@ -55,6 +58,9 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
     --- calculate total loss
     local loss = 0
     for _, mod in ipairs(content_losses) do
+      loss = loss + mod.loss
+    end
+    for _, mod in ipairs(luminance_losses) do
       loss = loss + mod.loss
     end
     for _, mod in ipairs(temporal_losses) do
@@ -93,6 +99,9 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
     local grad = net:backward(x, dy)
     local loss = 0
     for _, mod in ipairs(content_losses) do
+      loss = loss + mod.loss
+    end
+    for _, mod in ipairs(luminance_losses) do
       loss = loss + mod.loss
     end
     for _, mod in ipairs(temporal_losses) do
@@ -137,6 +146,7 @@ end
 function buildNet(cnn, params)
   local content_layers = params.content_layers:split(",")
   local style_layers = params.style_layers:split(",")
+  local luminance_layers = params.luminance_layers:split(",")
   -- Which layer to use for the temporal loss. By default, it uses a pixel based loss, masked by the certainty
   --(indicated by initWeighted).
   local temporal_layers = params.temporal_weight > 0 and {'initWeighted'} or {}
@@ -145,7 +155,7 @@ function buildNet(cnn, params)
   local contentLike_layers_indices = {}
   local contentLike_layers_type = {}
   
-  local next_content_i, next_style_i, next_temporal_i = 1, 1, 1
+  local next_content_i, next_style_i, next_temporal_i, next_luminance_i = 1, 1, 1, 1
   local current_layer_index = 1
   local net = nn.Sequential()
   
@@ -167,7 +177,7 @@ function buildNet(cnn, params)
     current_layer_index = current_layer_index + 1
   end
   for i = 1, #cnn do
-    if next_content_i <= #content_layers or next_style_i <= #style_layers or next_temporal_i <= #temporal_layers then
+    if next_content_i <= #content_layers or next_style_i <= #style_layers or next_temporal_i <= #temporal_layers or next_luminance_i <= #luminance_layers then
       local layer = cnn:get(i)
       local name = layer.name
       local layer_type = torch.type(layer)
@@ -190,6 +200,12 @@ function buildNet(cnn, params)
         table.insert(contentLike_layers_indices, current_layer_index)
         table.insert(contentLike_layers_type, 'content')
         next_content_i = next_content_i + 1
+      end
+      if name == luminance_layers[next_luminance_i] then
+        print("Setting up luminance layer", i, ":", layer.name)
+        table.insert(contentLike_layers_indices, current_layer_index)
+        table.insert(contentLike_layers_type, 'luminance')
+        next_luminance_i = next_luminance_i + 1
       end
       if name == temporal_layers[next_temporal_i] then
         print("Setting up temporal layer", i, ":", layer.name)
@@ -243,6 +259,49 @@ function ContentLoss:updateGradInput(input, gradOutput)
   end
   self.gradInput:mul(self.strength)
   self.gradInput:add(gradOutput)
+  --print('content grad input: ')
+  --print(self.gradInput:size())
+  return self.gradInput
+end
+
+-- Define an nn Module to compute luminance loss in-place
+local LuminanceLoss, parent = torch.class('nn.LuminanceLoss', 'nn.Module')
+
+function LuminanceLoss:__init(strength, target, normalize)
+  parent.__init(self)
+  self.strength = strength
+  self.target = target
+  self.normalize = normalize or false
+  self.loss = 0
+end
+
+function LuminanceLoss:updateOutput(input)
+  if input:nElement() == self.target:nElement() then
+    -- Y=0.299R+0.587G+0.114B
+    -- loss = (1/N)*(y_i-y_t)^2
+    local ldiff = torch.sum(input)-torch.sum(self.target)
+    self.loss = (ldiff * ldiff / input:nElement()) * self.strength
+  else
+    print('WARNING: Skipping luminance loss')
+  end
+  self.output = input
+  return self.output
+end
+
+function LuminanceLoss:updateGradInput(input, gradOutput)
+  if input:nElement() == self.target:nElement() then
+    local ldiff = torch.sum(input)-torch.sum(self.target)
+    local basegrad = (2.0/input:nElement())*ldiff
+    self.gradInput:resizeAs(input)
+    self.gradInput:fill(basegrad)
+  end
+  if self.normalize then
+    self.gradInput:div(torch.norm(self.gradInput, 1) + 1e-8)
+  end
+  self.gradInput:mul(self.strength)
+  self.gradInput:add(gradOutput)
+  --print('luminance grad input: ')
+  --print(self.gradInput:size())
   return self.gradInput
 end
 
@@ -276,7 +335,6 @@ end
 
 function WeightedContentLoss:updateOutput(input)
   if input:nElement() == self.target:nElement() then
-    self.loss = self.crit:forward(input, self.target) * self.strength
     if self.weights ~= nil then
       self.loss = self.crit:forward(torch.cmul(input, self.weights), self.target) * self.strength
     else
@@ -399,7 +457,17 @@ function getContentLossModuleForLayer(net, layer_idx, target_img, params)
   loss_module = MaybePutOnGPU(loss_module, params)
   return loss_module
 end
-
+function getLuminanceLossModuleForLayer(net, layer_idx, target_img, params)
+  local tmpNet = nn.Sequential()
+  for i = 1, layer_idx-1 do
+    local layer = net:get(i)
+    tmpNet:add(layer)
+  end
+  local target = tmpNet:forward(target_img):clone()
+  local loss_module = nn.LuminanceLoss(params.luminance_weight, target, params.normalize_gradients):float()
+  loss_module = MaybePutOnGPU(loss_module, params)
+  return loss_module
+end
 function getStyleLossModuleForLayer(net, layer_idx, target_img, params)
   local gram = GramMatrix():float()
   gram = MaybePutOnGPU(gram, params)

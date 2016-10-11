@@ -28,12 +28,12 @@ if [ "$#" -le 1 ]; then
    echo -e "\tfilePattern:\tFilename pattern of the frames of the videos."
    echo -e "\toutputFolder:\tOutput folder."
    echo -e "\tstartNumber:\tThe index of the first frame. Default: 1"
-   echo -e "\tstepSize:\tThe step size to create long-term flow. Default: 1"
+   echo -e "\tstepSize k:\tProcess every k frame. (For parallel processing) Default: 1"
    exit 1
 fi
 
 i=$[$startFrame]
-j=$[$startFrame + $stepSize]
+j=$[$startFrame + 1]
 
 mkdir -p "${folderName}"
 
@@ -53,6 +53,6 @@ while true; do
   else
     break
   fi
-  i=$[$i +1]
-  j=$[$j +1]
+  i=$[$i + $stepSize]
+  j=$[$j + $stepSize]
 done

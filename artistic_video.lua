@@ -31,6 +31,7 @@ cmd:option('-invert_flowWeights', 0, 'Invert flow weights given by flowWeight_pa
 -- Optimization options
 cmd:option('-content_weight', 5e0)
 cmd:option('-style_weight', 5e0)
+cmd:option('-luminance_weight', 1.5e-3)
 cmd:option('-temporal_weight', 1e3)
 cmd:option('-tv_weight', 1e-3)
 cmd:option('-temporal_loss_criterion', 'mse', 'mse|smoothl1')
@@ -59,6 +60,7 @@ cmd:option('-backend', 'nn', 'nn|cudnn|clnn')
 cmd:option('-cudnn_autotune', false)
 cmd:option('-seed', -1)
 cmd:option('-content_layers', 'relu4_2', 'layers for content')
+cmd:option('-luminance_layers', 'relu4_3', 'layers for luminance')
 cmd:option('-style_layers', 'relu1_1,relu2_1,relu3_1,relu4_1,relu5_1', 'layers for style')
 cmd:option('-args', '', 'Arguments in a file, one argument per line')
 
@@ -141,7 +143,7 @@ local function main(params)
       print("No more frames.")
       do return end
     end
-    local content_losses, temporal_losses, style_losses = {}, {}, {}
+    local luminance_losses, content_losses, temporal_losses, style_losses = {}, {}, {}, {}
     local additional_layers = 0
     local num_iterations = frameIdx == params.start_number and tonumber(numIters_first) or tonumber(numIters_subseq)
     local init = frameIdx == params.start_number and init_first or init_subseq
@@ -195,6 +197,12 @@ local function main(params)
           losses_indices[i] + additional_layers, content_image, params)
         net:insert(loss_module, losses_indices[i] + additional_layers)
         table.insert(style_losses, loss_module)
+        additional_layers = additional_layers + 1
+      elseif losses_type[i] == 'luminance' then
+        local loss_module = getLuminanceLossModuleForLayer(net,
+          losses_indices[i] + additional_layers, content_image, params)
+        net:insert(loss_module, losses_indices[i] + additional_layers)
+        table.insert(luminance_losses, loss_module)
         additional_layers = additional_layers + 1
       elseif losses_type[i] == 'prevPlusFlow' and frameIdx > params.start_number then
         for j=1, #J do
@@ -264,7 +272,7 @@ local function main(params)
     end
 
     -- Run the optimization to stylize the image, save the result to disk
-    runOptimization(params, net, content_losses, style_losses, temporal_losses, img, frameIdx, -1, num_iterations)
+    runOptimization(params, net, content_losses, style_losses, temporal_losses, luminance_losses, img, frameIdx, -1, num_iterations)
 
     if frameIdx == params.start_number then
       firstImg = img:clone():float()
@@ -272,7 +280,7 @@ local function main(params)
     
     -- Remove this iteration's content and temporal layers
     for i=#losses_indices, 1, -1 do
-      if frameIdx > params.start_number or losses_type[i] == 'content' or losses_type[i] == 'style' then
+      if frameIdx > params.start_number or losses_type[i] == 'content' or losses_type[i] == 'style' or losses_type[i] == 'luminance' then
         if losses_type[i] == 'prevPlusFlowWeighted' or losses_type[i] == 'prevPlusFlow' then
           for j=1, #J do
             additional_layers = additional_layers - 1
