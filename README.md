@@ -25,6 +25,7 @@ Deepmatching and deepflow is super slow. Run them parallely on CPU cluster or ru
   + ...      
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* k-1 k`  
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* k k`   
+    
 ##To Do
 + At last step, apply a 3*3 median filter.
 + Tune style_weight (relation_weight), content_weight and temporal_weight.  
