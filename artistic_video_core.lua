@@ -35,7 +35,9 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
   end
 
   local function maybe_print(t, loss, alwaysPrint)
-    local should_print = (params.print_iter > 0 and t % params.print_iter == 0) or alwaysPrint
+    -- local should_print = (params.print_iter > 0 and t % params.print_iter == 0) or alwaysPrint
+    -- For rendering long video, don't output too many info
+    local should_print = false
     if should_print then
       print(string.format('Iteration %d / %d', t, max_iter))
       for i, loss_module in ipairs(content_losses) do
