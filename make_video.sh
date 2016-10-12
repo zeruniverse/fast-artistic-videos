@@ -43,9 +43,9 @@ else
   exit 1
 fi
 
-style_weight=1e0
+style_weight=8e0
 temporal_weight=9e3
-content_weight=8e1
+content_weight=3e1
 
 # Umm... This does not give good result...
 luminance_weight=0e-2
