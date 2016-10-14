@@ -7,7 +7,7 @@ local lbfgs_mod = require 'lbfgs'
 --- MAIN FUNCTIONS
 ---
 
-function runOptimization(params, net, content_losses, style_losses, temporal_losses, luminance_losses,
+function runOptimization(params, net, content_losses, style_losses, temporal_losses, 
     img, frameIdx, runIdx, max_iter, content_img)
   local isMultiPass = (runIdx ~= -1)
 
@@ -33,7 +33,7 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
   else
     error(string.format('Unrecognized optimizer "%s"', params.optimizer))
   end
-
+  local luminance_loss = 0
   local function maybe_print(t, loss, alwaysPrint)
     -- local should_print = (params.print_iter > 0 and t % params.print_iter == 0) or alwaysPrint
     -- For rendering long video, don't output too many info
@@ -49,9 +49,12 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
       for i, loss_module in ipairs(style_losses) do
         print(string.format('  Style %d loss: %f', i, loss_module.loss))
       end
+      print(string.format('  Luminance loss: %f', luminance_loss))
+      --[[
       for i, loss_module in ipairs(luminance_losses) do
         print(string.format('  Luminance %d loss: %f', i, loss_module.loss))
       end
+      --]]
       print(string.format('  Total loss: %f', loss))
     end
   end
@@ -62,9 +65,11 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
     for _, mod in ipairs(content_losses) do
       loss = loss + mod.loss
     end
+    --[[
     for _, mod in ipairs(luminance_losses) do
       loss = loss + mod.loss
     end
+    --]]
     for _, mod in ipairs(temporal_losses) do
       loss = loss + mod.loss
     end
@@ -95,17 +100,26 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
   -- times, so we manually count the number of iterations to handle printing
   -- and saving intermediate results.
   local num_calls = 0
+  
+  local content_y = torch.sum(image.rgb2yuv(content_img)[{{1, 1}}])
   local function feval(x)
     num_calls = num_calls + 1
     net:forward(x)
     local grad = net:backward(x, dy)
-    local loss = 0
+    local luminance_diff=torch.sum(image.rgb2yuv(x)[{{1, 1}}])-content_y
+    luminance_loss=0.5*torch.pow(luminance_diff,2)*params.luminance_weight
+    grad[1]:add(0.299*params.luminance_weight*luminance_diff)
+    grad[2]:add(0.587*params.luminance_weight*luminance_diff)
+    grad[3]:add(0.114*params.luminance_weight*luminance_diff)
+    local loss = luminance_loss
     for _, mod in ipairs(content_losses) do
       loss = loss + mod.loss
     end
+    --[[
     for _, mod in ipairs(luminance_losses) do
       loss = loss + mod.loss
     end
+    --]]
     for _, mod in ipairs(temporal_losses) do
       loss = loss + mod.loss
     end
@@ -148,7 +162,9 @@ end
 function buildNet(cnn, params)
   local content_layers = params.content_layers:split(",")
   local style_layers = params.style_layers:split(",")
+  --[[
   local luminance_layers = params.luminance_layers:split(",")
+  --]]
   -- Which layer to use for the temporal loss. By default, it uses a pixel based loss, masked by the certainty
   --(indicated by initWeighted).
   local temporal_layers = params.temporal_weight > 0 and {'initWeighted'} or {}
@@ -157,7 +173,10 @@ function buildNet(cnn, params)
   local contentLike_layers_indices = {}
   local contentLike_layers_type = {}
   
+  --[[
   local next_content_i, next_style_i, next_temporal_i, next_luminance_i = 1, 1, 1, 1
+  --]]
+  local next_content_i, next_style_i, next_temporal_i = 1, 1, 1
   local current_layer_index = 1
   local net = nn.Sequential()
   
@@ -179,7 +198,7 @@ function buildNet(cnn, params)
     current_layer_index = current_layer_index + 1
   end
   for i = 1, #cnn do
-    if next_content_i <= #content_layers or next_style_i <= #style_layers or next_temporal_i <= #temporal_layers or next_luminance_i <= #luminance_layers then
+    if next_content_i <= #content_layers or next_style_i <= #style_layers or next_temporal_i <= #temporal_layers then
       local layer = cnn:get(i)
       local name = layer.name
       local layer_type = torch.type(layer)
@@ -203,12 +222,14 @@ function buildNet(cnn, params)
         table.insert(contentLike_layers_type, 'content')
         next_content_i = next_content_i + 1
       end
+      --[[
       if name == luminance_layers[next_luminance_i] then
         print("Setting up luminance layer", i, ":", layer.name)
         table.insert(contentLike_layers_indices, current_layer_index)
         table.insert(contentLike_layers_type, 'luminance')
         next_luminance_i = next_luminance_i + 1
       end
+      --]]
       if name == temporal_layers[next_temporal_i] then
         print("Setting up temporal layer", i, ":", layer.name)
         table.insert(contentLike_layers_indices, current_layer_index)
@@ -266,6 +287,7 @@ function ContentLoss:updateGradInput(input, gradOutput)
   return self.gradInput
 end
 
+--[[
 -- Define an nn Module to compute luminance loss in-place
 local LuminanceLoss, parent = torch.class('nn.LuminanceLoss', 'nn.Module')
 
@@ -306,6 +328,7 @@ function LuminanceLoss:updateGradInput(input, gradOutput)
   --print(self.gradInput:size())
   return self.gradInput
 end
+--]]
 
 -- Define an nn Module to compute content loss in-place
 local WeightedContentLoss, parent = torch.class('nn.WeightedContentLoss', 'nn.Module')
@@ -459,6 +482,7 @@ function getContentLossModuleForLayer(net, layer_idx, target_img, params)
   loss_module = MaybePutOnGPU(loss_module, params)
   return loss_module
 end
+--[[
 function getLuminanceLossModuleForLayer(net, layer_idx, target_img, params)
   local tmpNet = nn.Sequential()
   for i = 1, layer_idx-1 do
@@ -470,6 +494,7 @@ function getLuminanceLossModuleForLayer(net, layer_idx, target_img, params)
   loss_module = MaybePutOnGPU(loss_module, params)
   return loss_module
 end
+--]]
 function getStyleLossModuleForLayer(net, layer_idx, target_img, params)
   local gram = GramMatrix():float()
   gram = MaybePutOnGPU(gram, params)
