@@ -8,7 +8,7 @@ local lbfgs_mod = require 'lbfgs'
 ---
 
 function runOptimization(params, net, content_losses, style_losses, temporal_losses, luminance_losses,
-    img, frameIdx, runIdx, max_iter)
+    img, frameIdx, runIdx, max_iter, content_img)
   local isMultiPass = (runIdx ~= -1)
 
   -- Run it through the network once to get the proper size for the gradient
@@ -55,7 +55,13 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
       print(string.format('  Total loss: %f', loss))
     end
   end
-
+  function setycolor(content, generated)
+    local generated_y = image.rgb2yuv(generated)[{{1, 1}}]
+    local generated_uv = image.rgb2yuv(generated)[{{2, 3}}]
+    local content_y = image.rgb2yuv(content)[{{1, 1}}]
+    generated_y = torch.mul(generated_y, 1.0*torch.sum(content_y)/torch.sum(generated_y))
+    return image.yuv2rgb(torch.cat(generated_y, generated_uv, 1))
+  end
   local function print_end(t)
     --- calculate total loss
     local loss = 0
@@ -85,7 +91,7 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
       else
         filename = build_OutFilename(params, math.abs(frameIdx - params.start_number + 1), should_save_end and -1 or t)
       end
-      save_image(img, filename)
+      save_image(setycolor(content_img,img), filename)
     end
   end
 
