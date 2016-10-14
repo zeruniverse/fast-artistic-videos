@@ -33,11 +33,11 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
   else
     error(string.format('Unrecognized optimizer "%s"', params.optimizer))
   end
-  local luminance_loss = 0
+  local pixel_loss = 0
   local function maybe_print(t, loss, alwaysPrint)
-    -- local should_print = (params.print_iter > 0 and t % params.print_iter == 0) or alwaysPrint
+    local should_print = (params.print_iter > 0 and t % params.print_iter == 0) or alwaysPrint
     -- For rendering long video, don't output too many info
-    local should_print = false
+    -- local should_print = false
     if should_print then
       print(string.format('Iteration %d / %d', t, max_iter))
       for i, loss_module in ipairs(content_losses) do
@@ -49,7 +49,7 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
       for i, loss_module in ipairs(style_losses) do
         print(string.format('  Style %d loss: %f', i, loss_module.loss))
       end
-      print(string.format('  Luminance loss: %f', luminance_loss))
+      print(string.format('  Pixel loss: %f', pixel_loss))
       --[[
       for i, loss_module in ipairs(luminance_losses) do
         print(string.format('  Luminance %d loss: %f', i, loss_module.loss))
@@ -61,7 +61,7 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
 
   local function print_end(t)
     --- calculate total loss
-    local loss = 0
+    local loss = pixel_loss
     for _, mod in ipairs(content_losses) do
       loss = loss + mod.loss
     end
@@ -101,17 +101,14 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
   -- and saving intermediate results.
   local num_calls = 0
   
-  local content_y = image.rgb2yuv(content_img)[{{1, 1}}]
   local function feval(x)
     num_calls = num_calls + 1
     net:forward(x)
     local grad = net:backward(x, dy)
-    local luminance_diff=image.rgb2yuv(x)[{{1, 1}}]-content_y
-    luminance_loss=0.5*torch.sum(torch.pow(luminance_diff,2))*params.luminance_weight
-    grad[1]:add(0.299*params.luminance_weight*luminance_diff[1])
-    grad[2]:add(0.587*params.luminance_weight*luminance_diff[1])
-    grad[3]:add(0.114*params.luminance_weight*luminance_diff[1])
-    local loss = luminance_loss
+    local pixel_diff=x-content_img
+    pixel_loss=0.5*torch.sum(torch.pow(pixel_diff,2))*params.pixel_weight
+    grad:add(params.pixel_weight*pixel_diff)
+    local loss = pixel_loss
     for _, mod in ipairs(content_losses) do
       loss = loss + mod.loss
     end

@@ -31,7 +31,7 @@ cmd:option('-invert_flowWeights', 0, 'Invert flow weights given by flowWeight_pa
 -- Optimization options
 cmd:option('-content_weight', 5e0)
 cmd:option('-style_weight', 5e0)
-cmd:option('-luminance_weight', 1.5e-3)
+cmd:option('-pixel_weight', 1.5e-4)
 cmd:option('-temporal_weight', 1e3)
 cmd:option('-tv_weight', 1e-3)
 cmd:option('-temporal_loss_criterion', 'mse', 'mse|smoothl1')
