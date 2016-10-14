@@ -101,16 +101,16 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
   -- and saving intermediate results.
   local num_calls = 0
   
-  local content_y = torch.sum(image.rgb2yuv(content_img)[{{1, 1}}])
+  local content_y = image.rgb2yuv(content_img)[{{1, 1}}]
   local function feval(x)
     num_calls = num_calls + 1
     net:forward(x)
     local grad = net:backward(x, dy)
-    local luminance_diff=torch.sum(image.rgb2yuv(x)[{{1, 1}}])-content_y
-    luminance_loss=0.5*torch.pow(luminance_diff,2)*params.luminance_weight
-    grad[1]:add(0.299*params.luminance_weight*luminance_diff)
-    grad[2]:add(0.587*params.luminance_weight*luminance_diff)
-    grad[3]:add(0.114*params.luminance_weight*luminance_diff)
+    local luminance_diff=image.rgb2yuv(x)[{{1, 1}}]-content_y
+    luminance_loss=0.5*torch.sum(torch.pow(luminance_diff,2))*params.luminance_weight
+    grad[1]:add(0.299*params.luminance_weight*luminance_diff[1])
+    grad[2]:add(0.587*params.luminance_weight*luminance_diff[1])
+    grad[3]:add(0.114*params.luminance_weight*luminance_diff[1])
     local loss = luminance_loss
     for _, mod in ipairs(content_losses) do
       loss = loss + mod.loss
