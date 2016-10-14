@@ -55,13 +55,7 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
       print(string.format('  Total loss: %f', loss))
     end
   end
-  function setycolor(content, generated)
-    local generated_y = image.rgb2yuv(generated)[{{1, 1}}]
-    local generated_uv = image.rgb2yuv(generated)[{{2, 3}}]
-    local content_y = image.rgb2yuv(content)[{{1, 1}}]
-    generated_y = torch.mul(generated_y, 1.0*torch.sum(content_y)/torch.sum(generated_y))
-    return image.yuv2rgb(torch.cat(generated_y, generated_uv, 1))
-  end
+
   local function print_end(t)
     --- calculate total loss
     local loss = 0
@@ -91,7 +85,7 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
       else
         filename = build_OutFilename(params, math.abs(frameIdx - params.start_number + 1), should_save_end and -1 or t)
       end
-      save_image(setycolor(content_img,img), filename)
+      save_image(img, filename)
     end
   end
 
@@ -134,7 +128,7 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
   -- Run optimization.
   if params.optimizer == 'lbfgs' then
     print('Running optimization with L-BFGS')
-    local x, losses = lbfgs_mod.optimize(feval, img, optim_state)
+    local x, losses = lbfgs_mod.optimize(content_img,feval, img, optim_state)
   elseif params.optimizer == 'adam' then
     print('Running optimization with ADAM')
     for t = 1, max_iter do
