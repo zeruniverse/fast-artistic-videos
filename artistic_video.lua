@@ -272,7 +272,7 @@ local function main(params)
     end
 
     -- Run the optimization to stylize the image, save the result to disk
-    runOptimization(params, net, content_losses, style_losses, temporal_losses, luminance_losses, img, frameIdx, -1, num_iterations)
+    runOptimization(params, net, content_losses, style_losses, temporal_losses, luminance_losses, img, frameIdx, -1, num_iterations,content_image)
 
     if frameIdx == params.start_number then
       firstImg = img:clone():float()
