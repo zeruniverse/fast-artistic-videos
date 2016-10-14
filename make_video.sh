@@ -48,7 +48,7 @@ temporal_weight=9e3
 content_weight=3e1
 
 # Umm... This does not give good result...
-luminance_weight=0e-2
+pixel_weight=3e-4
 
 echo ""
 read -p "Enter the zero-indexed ID of the GPU to use, or -1 for CPU mode (very slow!).\
@@ -66,7 +66,7 @@ th artistic_video.lua \
 -style_weight $style_weight \
 -temporal_weight $temporal_weight \
 -content_weight $content_weight \
--luminance_weight $luminance_weight \
+-pixel_weight $pixel_weight \
 -output_folder ${filename}/ \
 -backend $backend \
 -gpu $gpu \
