@@ -142,7 +142,7 @@ function runOptimization(params, net, content_losses, style_losses, temporal_los
   -- Run optimization.
   if params.optimizer == 'lbfgs' then
     print('Running optimization with L-BFGS')
-    local x, losses = lbfgs_mod.optimize(content_img,feval, img, optim_state)
+    local x, losses = lbfgs_mod.optimize(feval, img, optim_state)
   elseif params.optimizer == 'adam' then
     print('Running optimization with ADAM')
     for t = 1, max_iter do
