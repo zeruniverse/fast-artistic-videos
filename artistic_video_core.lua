@@ -8,7 +8,7 @@ local lbfgs_mod = require 'lbfgs'
 ---
 
 function runOptimization(params, net, perceptual_losses, style_losses, temporal_losses, 
-    img, frameIdx, max_iter, content_img, imgWarped,temporal_reliable)
+    img, frameIdx, max_iter, content_img)
 
   -- Run it through the network once to get the proper size for the gradient
   -- All the gradients will come from the extra loss modules, so we just pass
@@ -33,7 +33,6 @@ function runOptimization(params, net, perceptual_losses, style_losses, temporal_
     error(string.format('Unrecognized optimizer "%s"', params.optimizer))
   end
   local pixel_loss = 0
-  local temporal_loss = 0
   local function maybe_print(t, loss, alwaysPrint)
     local should_print = alwaysPrint
     -- For rendering long video, don't output too many info
@@ -43,19 +42,24 @@ function runOptimization(params, net, perceptual_losses, style_losses, temporal_
       for i, loss_module in ipairs(perceptual_losses) do
         print(string.format('  Perceptual %d loss: %f', i, loss_module.loss))
       end
+      for i, loss_module in ipairs(temporal_losses) do
+        print(string.format('  Temporal %d loss: %f', i, loss_module.loss))
+      end
       for i, loss_module in ipairs(style_losses) do
         print(string.format('  Style %d loss: %f', i, loss_module.loss))
       end
       print(string.format('  Pixel loss: %f', pixel_loss))
-      print(string.format('  Temporal loss: %f', temporal_loss))
       print(string.format('  Total loss: %f', loss))
     end
   end
 
   local function print_end(t)
     --- calculate total loss
-    local loss = pixel_loss + temporal_loss
+    local loss = pixel_loss
     for _, mod in ipairs(perceptual_losses) do
+      loss = loss + mod.loss
+    end
+    for _, mod in ipairs(temporal_losses) do
       loss = loss + mod.loss
     end
     for _, mod in ipairs(style_losses) do
@@ -87,6 +91,7 @@ function runOptimization(params, net, perceptual_losses, style_losses, temporal_
     pixel_loss=0.5*torch.sum(torch.pow(pixel_diff,2))*params.pixel_weight
     grad:add(params.pixel_weight*pixel_diff)
 
+    --[[
     if imgWarped == nil or temporal_reliable == nil then
       -- No temporal loss
       temporal_loss = 0.0
@@ -104,9 +109,14 @@ function runOptimization(params, net, perceptual_losses, style_losses, temporal_
       temporal_diff_grad[3]:cmul(temporal_reliable[1])
       grad:add(temporal_diff_grad)
     end
-
+    
     local loss = pixel_loss + temporal_loss
+    --]]
+    local loss = pixel_loss
     for _, mod in ipairs(perceptual_losses) do
+      loss = loss + mod.loss
+    end
+    for _, mod in ipairs(temporal_losses) do
       loss = loss + mod.loss
     end
     for _, mod in ipairs(style_losses) do
@@ -147,15 +157,24 @@ function buildNet(cnn, params)
 
   -- Which layer to use for the temporal loss. By default, it uses a pixel based loss, masked by the certainty
   --(indicated by initWeighted).
-
+  local temporal_layers = params.temporal_weight > 0 and {'initWeighted'} or {}
   local style_losses = {}
   local contentLike_layers_indices = {}
   local contentLike_layers_type = {}
   
-  local next_perceptual_i, next_style_i= 1, 1
+  local next_perceptual_i, next_style_i, next_temporal_i = 1, 1, 1
   local current_layer_index = 1
   local net = nn.Sequential()
   
+  -- Set up pixel based loss.
+  if temporal_layers[next_temporal_i] == 'init' or temporal_layers[next_temporal_i] == 'initWeighted'  then
+    print("Setting up temporal consistency.")
+    table.insert(contentLike_layers_indices, current_layer_index)
+    table.insert(contentLike_layers_type,
+      (temporal_layers[next_temporal_i] == 'initWeighted') and 'prevPlusFlowWeighted' or 'prevPlusFlow')
+    next_temporal_i = next_temporal_i + 1
+  end
+
   -- Set up other loss modules.
   -- For content loss, only remember the indices at which they are inserted, because the content changes for each frame.
   if params.tv_weight > 0 then
@@ -188,6 +207,12 @@ function buildNet(cnn, params)
         table.insert(contentLike_layers_indices, current_layer_index)
         table.insert(contentLike_layers_type, 'perceptual')
         next_perceptual_i = next_perceptual_i + 1
+      end
+      if name == temporal_layers[next_temporal_i] then
+        print("Setting up temporal layer", i, ":", layer.name)
+        table.insert(contentLike_layers_indices, current_layer_index)
+        table.insert(contentLike_layers_type, 'prevPlusFlow')
+        next_temporal_i = next_temporal_i + 1
       end
       if name == style_layers[next_style_i] then
         print("Setting up style layer  ", i, ":", layer.name)
@@ -251,6 +276,63 @@ function GramMatrix()
   return net
 end
 
+-- Define an nn Module to compute content loss in-place
+local WeightedContentLoss, parent = torch.class('nn.WeightedContentLoss', 'nn.Module')
+
+function WeightedContentLoss:__init(strength, target, weights, normalize, loss_criterion)
+  parent.__init(self)
+  self.strength = strength
+  if weights ~= nil then
+    -- Take square root of the weights, because of the way the weights are applied
+    -- to the mean square error function. We want w*(error^2), but we can only
+    -- do (w*error)^2 = w^2 * error^2
+    self.weights = torch.sqrt(weights)
+    self.target = torch.cmul(target, self.weights)
+  else
+    self.target = target
+    self.weights = nil
+  end
+  self.normalize = normalize or false
+  self.loss = 0
+  if loss_criterion == 'mse' then
+    self.crit = nn.MSECriterion()
+  elseif loss_criterion == 'smoothl1' then
+    self.crit = nn.SmoothL1Criterion()
+  else
+    print('WARNING: Unknown flow loss criterion. Using MSE.')
+    self.crit = nn.MSECriterion()
+  end
+end
+
+function WeightedContentLoss:updateOutput(input)
+  if input:nElement() == self.target:nElement() then
+    if self.weights ~= nil then
+      self.loss = self.crit:forward(torch.cmul(input, self.weights), self.target) * self.strength
+    else
+      self.loss = self.crit:forward(input, self.target) * self.strength
+    end
+  else
+    print('WARNING: Skipping content loss')
+  end
+  self.output = input
+  return self.output
+end
+
+function WeightedContentLoss:updateGradInput(input, gradOutput)
+  if input:nElement() == self.target:nElement() then
+    if self.weights ~= nil then
+      self.gradInput = self.crit:backward(torch.cmul(input, self.weights), self.target)
+    else
+      self.gradInput = self.crit:backward(input, self.target)
+    end
+  end
+  if self.normalize then
+    self.gradInput:div(torch.norm(self.gradInput, 1) + 1e-8)
+  end
+  self.gradInput:mul(self.strength)
+  self.gradInput:add(gradOutput)
+  return self.gradInput
+end
 
 -- Define an nn Module to compute style loss in-place
 local StyleLoss, parent = torch.class('nn.StyleLoss', 'nn.Module')
@@ -350,6 +432,18 @@ function getStyleLossModuleForLayer(net, layer_idx, target_img, params)
   return loss_module
 end
 
+function getWeightedContentLossModuleForLayer(net, layer_idx, target_img, params, weights)
+  local tmpNet = nn.Sequential()
+  for i = 1, layer_idx-1 do
+    local layer = net:get(i)
+    tmpNet:add(layer)
+  end
+  local target = tmpNet:forward(target_img):clone()
+  local loss_module = nn.WeightedContentLoss(params.temporal_weight, target, weights,
+      params.normalize_gradients, params.temporal_loss_criterion):float()
+  loss_module = MaybePutOnGPU(loss_module, params)
+  return loss_module
+end
 
 ---
 --- HELPER FUNCTIONS

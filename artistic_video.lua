@@ -130,7 +130,7 @@ local function main(params)
       print("No more frames.")
       do return end
     end
-    local perceptual_losses, style_losses = {}, {}
+    local perceptual_losses, temporal_losses, style_losses = {}, {}, {}
     local additional_layers = 0
     local init = frameIdx == params.start_number and init_first or init_subseq
     local imgWarped = nil
@@ -164,6 +164,21 @@ local function main(params)
         net:insert(loss_module, losses_indices[i] + additional_layers)
         table.insert(style_losses, loss_module)
         additional_layers = additional_layers + 1
+      elseif losses_type[i] == 'prevPlusFlow' and frameIdx > params.start_number then
+        local loss_module = getWeightedContentLossModuleForLayer(net,
+          losses_indices[i] + additional_layers, imgWarped,
+          params, nil)
+        net:insert(loss_module, losses_indices[i] + additional_layers)
+        table.insert(temporal_losses, loss_module)
+        additional_layers = additional_layers + 1
+      elseif losses_type[i] == 'prevPlusFlowWeighted' and frameIdx > params.start_number then
+        temporal_reliable = temporal_reliable:expand(3, temporal_reliable:size(2), temporal_reliable:size(3))
+        local loss_module = getWeightedContentLossModuleForLayer(net,
+          losses_indices[i] + additional_layers, imgWarped,
+          params, temporal_reliable)
+        net:insert(loss_module, losses_indices[i] + additional_layers)
+        table.insert(temporal_losses, loss_module)
+        additional_layers = additional_layers + 1
       end
     end
 
@@ -196,7 +211,7 @@ local function main(params)
     img = MaybePutOnGPU(img, params)
 
     -- Run the optimization to stylize the image, save the result to disk
-    runOptimization(params, net, perceptual_losses, style_losses, temporal_losses, img, frameIdx, num_iterations, content_image,imgWarped,temporal_reliable)
+    runOptimization(params, net, perceptual_losses, style_losses, temporal_losses, img, frameIdx, num_iterations, content_image)
 
     if frameIdx == params.start_number then
       firstImg = img:clone():float()
@@ -204,7 +219,7 @@ local function main(params)
     
     -- Remove this iteration's content layers
     for i=#losses_indices, 1, -1 do
-      if frameIdx > params.start_number or losses_type[i] == 'perceptual' or losses_type[i] == 'style' then
+      if frameIdx > params.start_number or losses_type[i] == 'perceptual' or losses_type[i] == 'style' or losses_type[i] == 'temporal' then
         additional_layers = additional_layers - 1
         net:remove(losses_indices[i] + additional_layers)
       end
