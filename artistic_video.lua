@@ -24,12 +24,9 @@ cmd:option('-flow_pattern', 'example/deepflow/backward_[%d]_{%d}.flo',
            'Optical flow files pattern')
 cmd:option('-flowWeight_pattern', 'example/deepflow/reliable_[%d]_{%d}.pgm',
            'Optical flow weight files pattern.')
-cmd:option('-flow_relative_indices', '1', 'Use flow from the given indices.')
-cmd:option('-use_flow_every', -1, 'Uses flow from the given index and every multiple of that; -1 to to disable.')
-cmd:option('-invert_flowWeights', 0, 'Invert flow weights given by flowWeight_pattern.')
 
 -- Optimization options
-cmd:option('-content_weight', 5e0)
+cmd:option('-perceptual_weight', 5e0)
 cmd:option('-style_weight', 5e0)
 cmd:option('-pixel_weight', 1.5e-4)
 cmd:option('-temporal_weight', 1e3)
@@ -45,30 +42,20 @@ cmd:option('-optimizer', 'lbfgs', 'lbfgs|adam')
 cmd:option('-learning_rate', 1e1)
 
 -- Output options
-cmd:option('-print_iter', 100)
-cmd:option('-save_iter', 0)
 cmd:option('-output_image', 'out.png')
 cmd:option('-output_folder', '')
-cmd:option('-save_init', false, 'Whether the initialization image should be saved (for debugging purposes).')
 
 -- Other options
-cmd:option('-style_scale', 1.0)
 cmd:option('-pooling', 'max', 'max|avg')
 cmd:option('-proto_file', 'models/VGG_ILSVRC_19_layers_deploy.prototxt')
 cmd:option('-model_file', 'models/VGG_ILSVRC_19_layers.caffemodel')
 cmd:option('-backend', 'nn', 'nn|cudnn|clnn')
 cmd:option('-cudnn_autotune', false)
 cmd:option('-seed', -1)
-cmd:option('-content_layers', 'relu4_2', 'layers for content')
---[[
-cmd:option('-luminance_layers', 'relu4_3', 'layers for luminance')
---]]
+cmd:option('-perceptual_layers', 'relu4_2', 'layers for content')
 cmd:option('-style_layers', 'relu1_1,relu2_1,relu3_1,relu4_1,relu5_1', 'layers for style')
 cmd:option('-args', '', 'Arguments in a file, one argument per line')
 
--- Advanced options (changing them is usually not required)
-cmd:option('-combine_flowWeights_method', 'closestFirst',
-           'Which long-term weighting scheme to use: normalize or closestFirst. Deafult and recommended: closestFirst')
 
 function nn.SpatialConvolutionMM:accGradParameters()
   -- nop.  not needed by our net
@@ -118,13 +105,11 @@ local function main(params)
   collectgarbage()
 
   -- There can be different setting for the first frame and for subsequent frames.
-  local num_iterations_split = params.num_iterations:split(",")
-  local numIters_first, numIters_subseq = num_iterations_split[1], num_iterations_split[2] or num_iterations_split[1]
+  local num_iterations = params.num_iterations
   local init_split = params.init:split(",")
   local init_first, init_subseq = init_split[1], init_split[2] or init_split[1]
   
   local firstImg = nil
-  local flow_relative_indices_split = params.flow_relative_indices:split(",")
 
   local num_images = params.num_images
   if num_images == 0 then
@@ -145,57 +130,33 @@ local function main(params)
       print("No more frames.")
       do return end
     end
-    --[[
-    local luminance_losses, content_losses, temporal_losses, style_losses = {}, {}, {}, {}
-    --]]
-    local content_losses, temporal_losses, style_losses = {}, {}, {}
+    local perceptual_losses, style_losses = {}, {}
     local additional_layers = 0
-    local num_iterations = frameIdx == params.start_number and tonumber(numIters_first) or tonumber(numIters_subseq)
     local init = frameIdx == params.start_number and init_first or init_subseq
-    -- stores previous image indices used for the temporal constraint
-    local J = {}
-    -- stores previous image(s) warped
-    local imgsWarped = {}
-    
+    local imgWarped = nil
+    local temporal_reliable = nil
     -- Calculate from which indices we need a warped image
     if frameIdx > params.start_number and params.temporal_weight ~= 0 then
-      for i=1, #flow_relative_indices_split do
-        local prevIndex = frameIdx - tonumber(flow_relative_indices_split[i])
-        if prevIndex >= params.start_number then 
-          table.insert(J, frameIdx - tonumber(flow_relative_indices_split[i]))
-        end
-      end
-      if params.use_flow_every > 0 then
-        for prevIndex=frameIdx - params.use_flow_every, params.start_number, -1 * params.use_flow_every do
-          if not tabl_contains(J, prevIndex) then
-            table.insert(J, prevIndex)
-          end
-        end
-      end
-      -- Sort table descending, usefull to compute the long-term weights
-      table.sort(J, function(a,b) return a>b end)
-      -- Read the optical flow(s) and warp the previous image(s)
-      for j=1, #J do
-        local prevIndex = J[j]
-        local flowFileName = getFormatedFlowFileName(params.flow_pattern, math.abs(prevIndex), math.abs(frameIdx))
-        print(string.format('Reading flow file "%s".', flowFileName))
-        local flow = flowFile.load(flowFileName)
-        local fileName = build_OutFilename(params, math.abs(prevIndex - params.start_number + 1), -1)
-        local imgWarped = warpImage(image.load(fileName, 3), flow)
-        print(string.format('file "%s".', fileName))
-        imgWarped = preprocess(imgWarped):float()
-        imgWarped = MaybePutOnGPU(imgWarped, params)
-        table.insert(imgsWarped, imgWarped)
-      end
+      local prevIndex = frameIdx - 1
+      local flowFileName = getFormatedFlowFileName(params.flow_pattern, math.abs(prevIndex), math.abs(frameIdx))
+      local weightsFileName = getFormatedFlowFileName(params.flowWeight_pattern, prevIndex, math.abs(frameIdx))
+      temporal_reliable = image.load(weightsFileName):float()
+      temporal_reliable = MaybePutOnGPU(temporal_reliable, params)
+      print(string.format('Reading flow file "%s".', flowFileName))
+      local flow = flowFile.load(flowFileName)
+      local fileName = build_OutFilename(params, math.abs(prevIndex - params.start_number + 1), -1)
+      imgWarped = warpImage(image.load(fileName, 3), flow)
+      print(string.format('file "%s".', fileName))
+      imgWarped = preprocess(imgWarped):float()
+      imgWarped = MaybePutOnGPU(imgWarped, params)
     end
 
-    -- Add content and temporal loss for this iteration. Style image is the same as content image
     for i=1, #losses_indices do
-      if losses_type[i] == 'content'  then
-        local loss_module = getContentLossModuleForLayer(net,
+      if losses_type[i] == 'perceptual'  then
+        local loss_module = getPerceptualLossModuleForLayer(net,
           losses_indices[i] + additional_layers, content_image, params)
         net:insert(loss_module, losses_indices[i] + additional_layers)
-        table.insert(content_losses, loss_module)
+        table.insert(perceptual_losses, loss_module)
         additional_layers = additional_layers + 1
       elseif losses_type[i] == 'style' then
         local loss_module = getStyleLossModuleForLayer(net,
@@ -203,45 +164,6 @@ local function main(params)
         net:insert(loss_module, losses_indices[i] + additional_layers)
         table.insert(style_losses, loss_module)
         additional_layers = additional_layers + 1
-      --[[
-      elseif losses_type[i] == 'luminance' then
-        local loss_module = getLuminanceLossModuleForLayer(net,
-          losses_indices[i] + additional_layers, content_image, params)
-        net:insert(loss_module, losses_indices[i] + additional_layers)
-        table.insert(luminance_losses, loss_module)
-        additional_layers = additional_layers + 1
-      --]]
-      elseif losses_type[i] == 'prevPlusFlow' and frameIdx > params.start_number then
-        for j=1, #J do
-          local loss_module = getWeightedContentLossModuleForLayer(net,
-            losses_indices[i] + additional_layers, imgsWarped[j],
-            params, nil)
-          net:insert(loss_module, losses_indices[i] + additional_layers)
-          table.insert(temporal_losses, loss_module)
-          additional_layers = additional_layers + 1
-        end
-      elseif losses_type[i] == 'prevPlusFlowWeighted' and frameIdx > params.start_number then
-        local flowWeightsTabl = {}
-        -- Read all flow weights
-        for j=1, #J do
-          local weightsFileName = getFormatedFlowFileName(params.flowWeight_pattern, J[j], math.abs(frameIdx))
-          print(string.format('Reading flowWeights file "%s".', weightsFileName))
-          table.insert(flowWeightsTabl, image.load(weightsFileName):float())
-        end
-        -- Preprocess flow weights, calculate long-term weights
-        processFlowWeights(flowWeightsTabl, params.combine_flowWeights_method, params.invert_flowWeights)
-        -- Create loss modules, one for each previous frame warped
-        for j=1, #J do
-          local flowWeights = flowWeightsTabl[j]
-          flowWeights = flowWeights:expand(3, flowWeights:size(2), flowWeights:size(3))
-          flowWeights = MaybePutOnGPU(flowWeights, params)
-          local loss_module = getWeightedContentLossModuleForLayer(net,
-            losses_indices[i] + additional_layers, imgsWarped[j],
-            params, flowWeights)
-          net:insert(loss_module, losses_indices[i] + additional_layers)
-          table.insert(temporal_losses, loss_module)
-          additional_layers = additional_layers + 1
-        end
       end
     end
 
@@ -272,31 +194,19 @@ local function main(params)
     end
     
     img = MaybePutOnGPU(img, params)
-    if params.save_init then
-      save_image(img,
-        string.format('%sinit-' .. params.number_format .. '.png',
-          params.output_folder, math.abs(frameIdx - params.start_number + 1)))
-    end
 
     -- Run the optimization to stylize the image, save the result to disk
-    runOptimization(params, net, content_losses, style_losses, temporal_losses, img, frameIdx, -1, num_iterations,content_image)
+    runOptimization(params, net, perceptual_losses, style_losses, temporal_losses, img, frameIdx, num_iterations, content_image,imgWarped,temporal_reliable)
 
     if frameIdx == params.start_number then
       firstImg = img:clone():float()
     end
     
-    -- Remove this iteration's content and temporal layers
+    -- Remove this iteration's content layers
     for i=#losses_indices, 1, -1 do
-      if frameIdx > params.start_number or losses_type[i] == 'content' or losses_type[i] == 'style' then
-        if losses_type[i] == 'prevPlusFlowWeighted' or losses_type[i] == 'prevPlusFlow' then
-          for j=1, #J do
-            additional_layers = additional_layers - 1
-            net:remove(losses_indices[i] + additional_layers)
-          end
-        else
-          additional_layers = additional_layers - 1
-          net:remove(losses_indices[i] + additional_layers)
-        end
+      if frameIdx > params.start_number or losses_type[i] == 'perceptual' or losses_type[i] == 'style' then
+        additional_layers = additional_layers - 1
+        net:remove(losses_indices[i] + additional_layers)
       end
     end
     
@@ -321,31 +231,6 @@ function warpImage(img, flow)
     end
   end
   return result
-end
-
--- Creates long-term flow weights
-function processFlowWeights(flowWeightsTabl, method, invert)
-  if invert == 1 then
-    for j=1, #flowWeightsTabl do
-      flowWeightsTabl[j]:apply(function(x) return 1 - x end)
-    end
-  end
-  if method == 'normalize' then
-    -- Normalize so that the weights sum up to max 1
-    local sum = tabl_sum(flowWeightsTabl)
-    sum:cmax(1)
-    for j=1, #flowWeightsTabl do
-      flowWeightsTabl[j]:cdiv(sum)
-    end
-  elseif method == 'closestFirst' then
-    -- Take the closest previous frame(s).
-    for j=2, #flowWeightsTabl do
-      for k=1, j-1 do
-        flowWeightsTabl[j]:add(-1, flowWeightsTabl[j-k])
-      end
-      flowWeightsTabl[j]:cmax(0)
-    end
-  end
 end
 
 local tmpParams = cmd:parse(arg)

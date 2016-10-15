@@ -43,18 +43,17 @@ else
   exit 1
 fi
 
-style_weight=8e0
-temporal_weight=9e3
-content_weight=3e1
-
-# Umm... This does not give good result...
-pixel_weight=3e-4
-
+style_weight=3e1
+temporal_weight=3e-5
+perceptual_weight=1e2
+pixel_weight=5e-3
 echo ""
 read -p "Enter the zero-indexed ID of the GPU to use, or -1 for CPU mode (very slow!).\
  [0] $cr > " gpu
 gpu=${gpu:-0}
 
+echo ""
+echo "Computing optical flow. This may take a while..."
 
 start=$(date +%s.%N)
 
@@ -65,7 +64,7 @@ th artistic_video.lua \
 -flowWeight_pattern ${filename}/flow_${resolution}/reliable_[%d]_{%d}.pgm \
 -style_weight $style_weight \
 -temporal_weight $temporal_weight \
--content_weight $content_weight \
+-perceptual_weight $perceptual_weight \
 -pixel_weight $pixel_weight \
 -output_folder ${filename}/ \
 -backend $backend \
@@ -79,4 +78,4 @@ runtime=$(python -c "print(${end} - ${start})")
 echo "Consistency Network Runtime Was $runtime Seconds"
 
 # Create video from output images.
-$FFMPEG -i ${filename}/out-%06d.png ${filename}-stylized.$extension
+#$FFMPEG -i ${filename}/out-%06d.png ${filename}-stylized.$extension
