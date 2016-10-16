@@ -85,4 +85,4 @@ runtime=$(python -c "print(${end} - ${start})")
 echo "Consistency Network Runtime Was $runtime Seconds"
 
 # Create video from output images.
-#$FFMPEG -i ${filename}/out-%06d.png ${filename}-stylized.$extension
+$FFMPEG -i ${filename}/out-%06d.png ${filename}-stylized.$extension
