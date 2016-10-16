@@ -47,6 +47,13 @@ style_weight=8e0
 temporal_weight=9e3
 perceptual_weight=3e1
 pixel_weight=1.5e-3
+
+#LOW PIXEL_WEIGHT, MORE STABLE
+#style_weight=8e0
+#temporal_weight=8e3
+#perceptual_weight=3e1
+#pixel_weight=9e-5
+
 echo ""
 read -p "Enter the zero-indexed ID of the GPU to use, or -1 for CPU mode (very slow!).\
  [0] $cr > " gpu
