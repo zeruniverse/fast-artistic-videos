@@ -67,6 +67,7 @@ the method proposed by Ruder et al. Our method makes it possible to stylize movi
 <h5>
 <a id="designer-templates" class="anchor" href="#sample_story_cmp" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Sample Story (15s)</h5>
 <iframe width="560" height="315" src="https://www.youtube.com/embed/PTlaByLz6I0" frameborder="0" allowfullscreen></iframe>
+<p>Resolution: 640*480</p>
 <table>
 <thead>
 <tr><th>Label (As in Video)</th><th>Method</th><th>Time</th></tr>
@@ -80,14 +81,29 @@ the method proposed by Ruder et al. Our method makes it possible to stylize movi
 </tbody>
 </table>
 <h5>
-<a id="designer-templates" class="anchor" href="#doraemon_cmp" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Doraemon (22m 39s)</h5>
-<iframe width="560" height="315" src="https://www.youtube.com/embed/mL_dCGtST-0" frameborder="0" allowfullscreen></iframe>
+<a id="designer-templates" class="anchor" href="#bunny_cmp" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Big Buck Bunny (8m 2s)</h5>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/EKJs2_iJVYk" frameborder="0" allowfullscreen></iframe>
+<p>Resolution: 960*540</p>
 <table>
 <thead>
 <tr><th>Label (As in Video)</th><th>Method</th><th>Time</th></tr>
 </thead>
 <tbody>
-<tr style="color:#66ccff"><td>With Temporal Consistency</td><td>Our Method</td><td>~58 hours</td></tr>
+<tr><td>Naive</td><td>Simply run Johnson's method for each frame</td><td> / </td></tr>
+<tr><td>Without Pixel Loss</td><td>Our method, with pixel-loss weight 0</td><td>33 hours</td></tr>
+<tr style="color:#66ccff"><td>With Pixel Loss</td><td>Our method, with pixel-loss weight 1.5e-3</td><td>33 hours</td></tr>
+</tbody>
+</table>
+<h5>
+<a id="designer-templates" class="anchor" href="#doraemon_cmp" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Doraemon (22m 39s)</h5>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/mL_dCGtST-0" frameborder="0" allowfullscreen></iframe>
+<p>Resolution: 640*480</p>
+<table>
+<thead>
+<tr><th>Label (As in Video)</th><th>Method</th><th>Time</th></tr>
+</thead>
+<tbody>
+<tr style="color:#66ccff"><td>With Temporal Consistency</td><td>Our Method</td><td>58 hours</td></tr>
 <tr><td>No Temporal Consistency</td><td>Simply run Johnson's method for each frame</td><td>1.89 hours</td></tr>
 <tr><td> / </td><td>Ruder et al. (1000 iterations)</td><td>(predict) ~23 days</td></tr>
 </tbody>
