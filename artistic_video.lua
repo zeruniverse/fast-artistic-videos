@@ -235,6 +235,7 @@ end
 -- Disocclusions at the borders will be filled with the VGG mean pixel.
 function warpImage(img, flow)
   -- local mean_pixel = torch.DoubleTensor({123.68/256.0, 116.779/256.0, 103.939/256.0})
+  -- Mean value cause problems for low iterations.
   result = image.warp(img, flow, 'bilinear', true, 'pad', -1)
   for x=1, result:size(2) do
     for y=1, result:size(3) do
