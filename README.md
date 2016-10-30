@@ -1,4 +1,5 @@
-#Fast Artistic Style Transfer for Video  
+#Fast Artistic Style Transfer for Video   
+Torch implementation of a faster video stylization approach. See details in [project page](https://zeruniverse.github.io/fast-artistic-videos/)     
 ##How to Install
 ``` bash
 #install torch
@@ -17,8 +18,8 @@ Below is an example to stylize video *example.mp4* (Result resolution 640:480)
   
 \*\_\_\_\* are parts you should change accordingly.  
   
-Deepmatching and deepflow is super slow. Run them parallely on CPU cluster or run their GPU versions.   
-We just need optical flow to keep temporal consistency, not necessary `deepflow`. But we only tested with `deepflow`.    
+Deepmatching and deepflow is super slow. Run them parallely on CPU cluster or run their GPU versions.     
+You just need optical flow to keep temporal consistency, not necessary `deepflow`. But we only tested with `deepflow`.    
 + To run parallely as *k* processes:    
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* 1 k`   
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* 2 k`   
@@ -26,3 +27,12 @@ We just need optical flow to keep temporal consistency, not necessary `deepflow`
   + ...      
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* k-1 k`  
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* k k`   
+  
+## Why Faster
+Use the real-time algorithm for stylization of each frame. So L-BFGS is only used for temporal consistency purpose. L-BFGS
+takes temporal loss, perceptual loss and relation loss into account and in addition, pixel loss to avoid contrast loss.       
+  
+## Reference  
+Implementation is based on the following two projects:  
++ [Perceptual Losses for Real-Time Style Transfer and Super-Resolution](https://github.com/jcjohnson/fast-neural-style)  
++ [Artistic style transfer for videos] (https://github.com/manuelruder/artistic-videos)   
