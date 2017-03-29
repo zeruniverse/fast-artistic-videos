@@ -1,4 +1,4 @@
-#Fast Artistic Style Transfer for Video   
+# Fast Artistic Style Transfer for Video   
 Torch implementation of a faster video stylization approach. See details and demos in [project page](https://zeruniverse.github.io/fast-artistic-videos/).     
 ![demo](https://cloud.githubusercontent.com/assets/4648756/19905301/599ad5fc-a033-11e6-9956-d0898bd581d6.jpg)   
 Watch demo videos on YouTube: [Demo Video](https://youtu.be/OA3AoLOyLu0), [Comparison With Other Methods](https://youtu.be/PTlaByLz6I0)    
@@ -21,9 +21,9 @@ Below is an example to stylize video *example.mp4* (Result resolution 640:480)
 \*\_\_\_\* are parts you should change accordingly.   
 Please refer to [this project](https://github.com/jcjohnson/fast-neural-style) if you want to train your own style model.   
   
-Deepmatching and deepflow is super slow. Run them parallely on CPU cluster or run their GPU versions.     
-You just need optical flow to keep temporal consistency, not necessary `deepflow`. But we only tested with `deepflow`.    
-+ To run parallely on *k* machines:    
+Deepmatching and deepflow are super slow. Run them parallelly on CPU cluster or run their GPU versions.     
+You only need optical flow to keep temporal consistency, not necessarily `deepflow`. We only tested with `deepflow`.    
++ To run parallelly on *k* machines:    
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* 1 k`   
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* 2 k`   
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* 3 k`   
