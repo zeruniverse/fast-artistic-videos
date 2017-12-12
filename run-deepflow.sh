@@ -2,8 +2,8 @@ if [ "$#" -ne 3 ]; then
   echo "This is an auxiliary script for makeOptFlow.sh. No need to call this script directly."
   exit 1
 fi
-if [ ! -f deepmatching-static ] && [ ! -f run_OF_RGB ]; then
-  echo "Place deepflow2-static and deepmatching-static in this directory."
+if [ ! -f run_OF_RGB ]; then
+  echo "Place run_OF_RGB in this directory."
   exit 1
 fi
 
