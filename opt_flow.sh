@@ -1,7 +1,7 @@
 #!/bin/bash
 # Specify the path to the optical flow utility here.
 # Also check line 44 and 47 whether the arguments are in the correct order.
-flowCommandLine="bash run-deepflow.sh"
+flowCommandLine="bash run-OF-RGB.sh"
 
 if [ -z "$flowCommandLine" ]; then
   echo "Please open opt_flow.sh and specify the command line for computing the optical flow."
