@@ -31,6 +31,10 @@ You only need optical flow to keep temporal consistency, not necessarily `deepfl
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* k-1 k`  
   + `bash opt_flow.sh *example_01/frame_%06d.ppm* *example/flow_640:480* k k`   
   
+## Optical Flow
+As suggested by [#7](https://github.com/zeruniverse/fast-artistic-videos/issues/7) and [#8](https://github.com/zeruniverse/fast-artistic-videos/pull/8), `OF_DIS` has been set to the default optical flow instead of `deepflow` to improve the efficiency. However, the pre-compiled `run_OF_RGB` was only tested on some Ubuntu systems, and if you have trouble running it, you might need to re-compile from [source](https://github.com/tikroeger/OF_DIS). Another option (also with slower speed but better quality) is to use the old `deepflow`. To use `deepflow`, you should change `
+flowCommandLine` to `"bash run-deepflow.sh"` in `opt_flow.sh`.
+
 ## Why Faster
 Use the real-time algorithm for stylization of each frame. So L-BFGS is only used for temporal consistency purpose. L-BFGS
 takes temporal loss, perceptual loss and relation loss into account and in addition, pixel loss to avoid contrast loss.       
@@ -40,7 +44,7 @@ Implementation is based on the following projects:
 
 + [Perceptual Losses for Real-Time Style Transfer and Super-Resolution](https://github.com/jcjohnson/fast-neural-style)  
 + [Artistic style transfer for videos](https://github.com/manuelruder/artistic-videos)   
-+ [DeepFlow and DeepMatching](http://thoth.inrialpes.fr/src/deepflow/)  
++ [DeepFlow, DeepMatching](http://thoth.inrialpes.fr/src/deepflow/) and [OF_DIS](https://github.com/tikroeger/OF_DIS)  
   
 Their license can be found in their project repository.  
   
